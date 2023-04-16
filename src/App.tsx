@@ -1,4 +1,5 @@
 import Fragment, { useEffect, useState, useCallback } from "react";
+import produce from "immer";
 
 const { log } = console;
 
@@ -58,6 +59,9 @@ const fragments: Fragment[] = [
   ],
 ];
 
+// TODO: debugging
+// https://www.youtube.com/watch?v=q3WHdoz2KmE&ab_channel=Profydev
+
 // TODO: refactor
 function createInitialStock(config: $fixme): Stock {
   let stock: Stock = {};
@@ -73,45 +77,30 @@ const initialState = {
 
 function App() {
   const [gameState, updateGameState] = useState<GameState>(initialState);
+  const [isPaused, toggleIsPaused] = useState(false);
 
-  // log(gameState);
-
+  // game loop
   useEffect(() => {
     const tick = () => {
-      // TODO: implement state update logic with immer?
-      updateGameState((prevState) => {
-        const isCrossingBorder = prevState.fragment.some(
-          ([y]) => y + 1 === config.canvasHeight
+      if (!isPaused) {
+        updateGameState((prevState) =>
+          produce(prevState, (draft) => {
+            const willCrossBottomOnNextStep = draft.fragment.some(
+              ([y]) => y + 1 === config.canvasHeight
+            );
+
+            if (willCrossBottomOnNextStep) {
+              draft.fragment.forEach(([y, x]) => {
+                draft.stock[y].push(x);
+              });
+
+              draft.fragment = fragments[0];
+            }
+
+            draft.fragment = draft.fragment.map(([y, x]) => [y + 1, x]);
+          })
         );
-
-        // const isCrossingStock =
-
-        /* -- -- Crossing border -- -- */
-        if (isCrossingBorder) {
-          let updatedStock = prevState.stock;
-
-          prevState.fragment.forEach(([y, x]) => {
-            updatedStock[y].push(x);
-          });
-
-          return {
-            ...prevState,
-            stock: updatedStock,
-            fragment: fragments[0],
-          };
-        }
-
-        /* -- -- Crossing stock -- -- */
-        // if (isCrossingStock) {}
-
-        /* -- -- General dropping update -- -- */
-        return {
-          ...prevState,
-          fragment: prevState.fragment.map(([cellY, cellX]) => {
-            return [cellY + 1, cellX];
-          }),
-        };
-      });
+      }
     };
 
     const gameLoop = setInterval(tick, config.updateSpeed);
@@ -119,31 +108,48 @@ function App() {
     return () => {
       clearInterval(gameLoop);
     };
+  }, [isPaused]);
+
+  // key handlers
+  useEffect(() => {
+    document.addEventListener("keydown", handleXShift);
+
+    return () => {
+      document.removeEventListener("keydown", handleXShift);
+    };
   }, []);
 
   // TODO: use callback?
-  const handleShift = (direction: ShiftDirection) => {
-    const move = (factor: number) => {
-      updateGameState((prevState) => {
-        const isValid = prevState.fragment.every(
-          ([y, x]) => x + factor >= 0 && x + factor < config.canvasWidth
-        );
+  const togglePause = () => {
+    toggleIsPaused((isPaused) => !isPaused);
+  };
 
-        return {
-          ...prevState,
-          fragment: isValid
-            ? prevState.fragment.map(([y, x]) => [y, x + factor])
-            : prevState.fragment,
-        };
-      });
+  // TODO: use callback?
+  const handleXShift = (event: KeyboardEvent) => {
+    const makeShift = (coefficient: number) => {
+      const { canvasWidth } = config;
+
+      updateGameState((prevState) =>
+        produce(prevState, (draft) => {
+          const isValid = draft.fragment.every(
+            ([y, x]) => x + coefficient >= 0 && x + coefficient < canvasWidth
+          );
+
+          draft.fragment = isValid
+            ? draft.fragment.map(([y, x]) => [y, x + coefficient])
+            : draft.fragment;
+        })
+      );
     };
 
-    switch (direction) {
-      case ShiftDirection.Left:
-        move(-1);
+    switch (event.key) {
+      case "ArrowLeft":
+        makeShift(-1);
         break;
-      case ShiftDirection.Right:
-        move(1);
+      case "ArrowRight":
+        makeShift(1);
+        break;
+      default:
         break;
     }
   };
@@ -198,8 +204,7 @@ function App() {
   const renderControls = () => {
     return (
       <div>
-        <button onClick={() => handleShift(ShiftDirection.Left)}>Left</button>
-        <button onClick={() => handleShift(ShiftDirection.Right)}>Right</button>
+        <button onClick={togglePause}>Toggle pause</button>
       </div>
     );
   };
