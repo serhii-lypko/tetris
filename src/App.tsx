@@ -85,18 +85,20 @@ function App() {
       if (!isPaused) {
         updateGameState((prevState) =>
           produce(prevState, (draft) => {
-            const willCrossBottomOnNextStep = draft.fragment.some(
+            const willCrossBottomBorder = draft.fragment.some(
               ([y]) => y + 1 === config.canvasHeight
             );
 
-            if (willCrossBottomOnNextStep) {
-              draft.fragment.forEach(([y, x]) => {
-                draft.stock[y].push(x);
-              });
+            const willCrossStock = draft.fragment.some(([y, x]) =>
+              draft.stock[y + 1]?.includes(x)
+            );
 
+            if (willCrossBottomBorder || willCrossStock) {
+              draft.fragment.forEach(([y, x]) => draft.stock[y].push(x));
               draft.fragment = fragments[0];
             }
 
+            /* -- -- -- Base move -- -- -- */
             draft.fragment = draft.fragment.map(([y, x]) => [y + 1, x]);
           })
         );
@@ -124,6 +126,7 @@ function App() {
     toggleIsPaused((isPaused) => !isPaused);
   };
 
+  // ❗️ TODO: prevent shifting into other pieces
   // TODO: use callback?
   const handleXShift = (event: KeyboardEvent) => {
     const makeShift = (coefficient: number) => {
@@ -205,6 +208,7 @@ function App() {
     return (
       <div>
         <button onClick={togglePause}>Toggle pause</button>
+        <button onClick={() => console.log(gameState)}>Show state</button>
       </div>
     );
   };
